@@ -7,8 +7,12 @@ import com.github.dockerjava.api.command.CreateContainerCmd;
 import com.github.dockerjava.api.command.CreateContainerResponse;
 import com.github.dockerjava.api.command.ExecCreateCmdResponse;
 import com.github.dockerjava.api.model.Frame;
-import com.github.dockerjava.core.DockerClientBuilder;
+import com.github.dockerjava.core.DefaultDockerClientConfig;
+import com.github.dockerjava.core.DockerClientConfig;
+import com.github.dockerjava.core.DockerClientImpl;
 import com.github.dockerjava.core.command.ExecStartResultCallback;
+import com.github.dockerjava.httpclient5.ApacheDockerHttpClient;
+import com.github.dockerjava.transport.DockerHttpClient;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,12 +23,36 @@ import java.io.IOException;
 import java.util.concurrent.TimeUnit;
 
 @Service
-@Slf4j
 public class DockerService {
     private static final Logger log = LoggerFactory.getLogger(DockerService.class);
-    //    Had to download docker-java 3.2.1 for DockerClientBuilder
-    private final DockerClient dockerClient = DockerClientBuilder.getInstance().build();
+    private DockerClient dockerClient;
+
     private String language;
+
+    public DockerService(){
+//        IMPORTANT NOTE: Need to expose this in Docker Desktop settings
+        String dockerHost = "tcp://localhost:2375";
+        log.info("Connecting to Docker at: {}", dockerHost);
+
+        DockerClientConfig config = DefaultDockerClientConfig.createDefaultConfigBuilder()
+                .withDockerHost(dockerHost)
+                .build();
+
+        DockerHttpClient httpClient = new ApacheDockerHttpClient.Builder()
+                .dockerHost(config.getDockerHost())
+                .sslConfig(config.getSSLConfig())
+                .build();
+
+        this.dockerClient = DockerClientImpl.getInstance(config, httpClient);
+
+        try {
+            dockerClient.pingCmd().exec();
+            log.info("Successfully connected to Docker!");
+        } catch (Exception e) {
+            log.error("Failed to connect to Docker. Please ensure Docker is running.", e);
+            throw new RuntimeException("Docker is not available. Please start Docker Desktop.", e);
+        }
+    }
 
     public String runCode(String code, String stdin, String language){
         this.language = language;
