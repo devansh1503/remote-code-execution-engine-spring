@@ -4,13 +4,11 @@ import com.devansh.rceengine.dto.CodeExecutionRequest;
 import com.devansh.rceengine.dto.CodeExecutionResult;
 import com.devansh.rceengine.service.DockerService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/execute")
+@CrossOrigin(origins = "http://localhost:5173")
 @RequiredArgsConstructor
 public class CodeExecutionController {
     private final DockerService dockerService;

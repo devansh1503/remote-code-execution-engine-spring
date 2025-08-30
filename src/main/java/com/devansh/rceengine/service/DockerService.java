@@ -1,6 +1,5 @@
 package com.devansh.rceengine.service;
 
-
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.command.CreateContainerCmd;
@@ -10,12 +9,9 @@ import com.github.dockerjava.api.model.Frame;
 import com.github.dockerjava.core.DefaultDockerClientConfig;
 import com.github.dockerjava.core.DockerClientConfig;
 import com.github.dockerjava.core.DockerClientImpl;
-import com.github.dockerjava.core.command.ExecStartResultCallback;
 import com.github.dockerjava.httpclient5.ApacheDockerHttpClient;
 import com.github.dockerjava.transport.DockerHttpClient;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
@@ -23,14 +19,12 @@ import java.io.IOException;
 import java.util.concurrent.TimeUnit;
 
 @Service
+@Slf4j
 public class DockerService {
-    private static final Logger log = LoggerFactory.getLogger(DockerService.class);
     private DockerClient dockerClient;
-
     private String language;
 
-    public DockerService(){
-//        IMPORTANT NOTE: Need to expose this in Docker Desktop settings
+    public DockerService() {
         String dockerHost = "tcp://localhost:2375";
         log.info("Connecting to Docker at: {}", dockerHost);
 
@@ -54,102 +48,123 @@ public class DockerService {
         }
     }
 
-    public String runCode(String code, String stdin, String language){
+    public String runCode(String code, String stdin, String language) {
         this.language = language;
         String containerId = null;
-        try{
-            CreateContainerCmd createContainerCmd = dockerClient.createContainerCmd(getBaseImage())
+        try {
+            log.info("Executing {} code: {}", language, code);
+
+            CreateContainerResponse container = dockerClient.createContainerCmd(getBaseImage())
                     .withTty(false)
                     .withAttachStdin(true)
                     .withAttachStdout(true)
-                    .withAttachStderr(true);
+                    .withAttachStderr(true)
+                    .withCmd("sh", "-c", "tail -f /dev/null")
+                    .exec();
 
-            CreateContainerResponse container = createContainerCmd.exec();
             containerId = container.getId();
             log.info("Created Container: {}", containerId);
 
             dockerClient.startContainerCmd(containerId).exec();
             log.info("Started Container: {}", containerId);
 
-            String[] command = {"/bin/sh", "-c", getShellCommand(code, stdin)};
+            // Add small delay to ensure container is ready
+            Thread.sleep(1000);
 
-            ByteArrayOutputStream stdout = new ByteArrayOutputStream();
-            ByteArrayOutputStream stderr = new ByteArrayOutputStream();
+            String shellCommand = getShellCommand(code, stdin);
+            log.info("Shell command: {}", shellCommand);
+
+            String[] command = {"/bin/sh", "-c", shellCommand};
+
+            final ByteArrayOutputStream stdout = new ByteArrayOutputStream();
+            final ByteArrayOutputStream stderr = new ByteArrayOutputStream();
 
             ExecCreateCmdResponse execCreateCmdResponse = dockerClient.execCreateCmd(containerId)
-                    .withAttachStdin(stdin!=null)
+                    .withAttachStdin(stdin != null)
                     .withAttachStdout(true)
                     .withAttachStderr(true)
                     .withCmd(command)
                     .exec();
 
             String execId = execCreateCmdResponse.getId();
+            log.info("Created exec instance: {}", execId);
 
-//            ExecStartResultCallback callback = new ExecStartResultCallback(stdout, stderr);
-
-//            Because ExecStartResultCallback is deprecated using Result Callback Adapter
-            dockerClient.execStartCmd(execId).exec(new ResultCallback.Adapter<Frame>() {
+            // Use the modern ResultCallback.Adapter approach
+            ResultCallback.Adapter<Frame> callback = new ResultCallback.Adapter<Frame>() {
                 @Override
                 public void onNext(Frame frame) {
-                    if (frame != null) {
+                    if (frame != null && frame.getPayload() != null) {
                         try {
+                            byte[] payload = frame.getPayload();
                             switch (frame.getStreamType()) {
                                 case STDOUT:
                                 case RAW:
-                                    stdout.write(frame.getPayload());
-                                    stdout.flush();
+                                    stdout.write(payload);
                                     break;
                                 case STDERR:
-                                    stderr.write(frame.getPayload());
-                                    stderr.flush();
-                                    break;
-                                default:
-                                    // Handle other stream types if necessary
+                                    stderr.write(payload);
                                     break;
                             }
                         } catch (IOException e) {
-                            onError(e);
+                            log.warn("Error writing frame payload", e);
                         }
                     }
                 }
-            }).awaitCompletion(15, TimeUnit.SECONDS);
 
-            String result = stdout.toString();
-            String errorOutput = stderr.toString();
+                @Override
+                public void onComplete() {
+                    super.onComplete();
+                    log.info("Execution completed successfully");
+                }
 
-            if(!errorOutput.isEmpty()) {
-                result = result = "STDERR:\n" + errorOutput + "\nSTDOUT:\n" + result;
+                @Override
+                public void onError(Throwable throwable) {
+                    log.error("Execution error", throwable);
+                    super.onError(throwable);
+                }
+            };
+
+            // Execute and wait for completion
+            dockerClient.execStartCmd(execId).exec(callback).awaitCompletion(30, TimeUnit.SECONDS);
+
+            String result = stdout.toString("UTF-8");
+            String errorOutput = stderr.toString("UTF-8");
+
+            log.info("STDOUT: '{}'", result);
+            log.info("STDERR: '{}'", errorOutput);
+
+            if (!errorOutput.isEmpty()) {
+                return "STDERR:\n" + errorOutput + "\nSTDOUT:\n" + result;
             }
 
-            return result;
+            return result.isEmpty() ? "(No output)" : result;
 
         } catch (Exception e) {
             log.error("Failed to execute code in container", e);
             return "Error: " + e.getMessage();
         } finally {
-            if (containerId != null){
-                try{
+            if (containerId != null) {
+                try {
                     dockerClient.removeContainerCmd(containerId).withForce(true).exec();
                     log.info("Removed Container: {}", containerId);
-                }
-                catch (Exception e){
+                } catch (Exception e) {
                     log.error("Could not remove container: {}", containerId, e);
                 }
             }
         }
     }
 
-    public String getBaseImage(){
+    public String getBaseImage() {
         return switch (this.language.toLowerCase()) {
             case "python" -> "python:3.10-alpine";
             case "javascript" -> "node:18-alpine";
             case "java" -> "openjdk:17-alpine";
-            case "cpp" -> "gcc";
-            default -> "openjdk:17-alpine";
+            case "cpp" -> "gcc:latest";
+            default -> "python:3.10-alpine";
         };
     }
 
-    public String getShellCommand(String code, String stdin){
+    public String getShellCommand(String code, String stdin) {
         String template = switch (language.toLowerCase()) {
             case "python" -> "echo \"%INPUT%\" | python3 -c \"%CODE%\"";
             case "javascript" -> "echo \"%INPUT%\" | node -e \"%CODE%\"";
@@ -163,15 +178,14 @@ public class DockerService {
                 g++ Main.cpp -o Main &&
                 echo "%INPUT%" | ./Main
                 """;
-            default -> "echo \"%INPUT%\" | node -e \"%CODE%\"";
+            default -> "echo \"%INPUT%\" | python3 -c \"%CODE%\"";
         };
 
-        String escapedCode = code.replace("\"", "\\\"");
-        String escapedInput = stdin.replace("\"", "\\\"");
+        String escapedCode = code.replace("\"", "\\\"").replace("$", "\\$");
+        String escapedInput = stdin != null ? stdin.replace("\"", "\\\"").replace("$", "\\$") : "";
 
         return template
                 .replace("%CODE%", escapedCode)
                 .replace("%INPUT%", escapedInput);
     }
-
 }
