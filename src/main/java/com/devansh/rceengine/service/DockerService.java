@@ -48,7 +48,7 @@ public class DockerService {
         }
     }
 
-    public String runCode(String code, String stdin, String language) {
+    public String[] runCode(String code, String stdin, String language) {
         this.language = language;
         String containerId = null;
         try {
@@ -124,8 +124,14 @@ public class DockerService {
                 }
             };
 
+            long startTime = System.nanoTime();
             // Execute and wait for completion
             dockerClient.execStartCmd(execId).exec(callback).awaitCompletion(30, TimeUnit.SECONDS);
+
+            long endTime = System.nanoTime();
+
+            double executionTimeSeconds = (endTime - startTime) / 1_000_000_000.0;
+            log.info("Execution time: {} seconds", executionTimeSeconds);
 
             String result = stdout.toString("UTF-8");
             String errorOutput = stderr.toString("UTF-8");
@@ -133,15 +139,20 @@ public class DockerService {
             log.info("STDOUT: '{}'", result);
             log.info("STDERR: '{}'", errorOutput);
 
-            if (!errorOutput.isEmpty()) {
-                return "STDERR:\n" + errorOutput + "\nSTDOUT:\n" + result;
-            }
+            String[]outputAndTime = new String[2];
+            outputAndTime[1] = String.format("%.3f Seconds",executionTimeSeconds);
 
-            return result.isEmpty() ? "(No output)" : result;
+            if (!errorOutput.isEmpty()) {
+                outputAndTime[0] = "STDERR:\n" + errorOutput + "\nSTDOUT:\n" + result;
+            }
+            else {
+                outputAndTime[0] = result.isEmpty() ? "(No output)" : result;
+            }
+            return outputAndTime;
 
         } catch (Exception e) {
             log.error("Failed to execute code in container", e);
-            return "Error: " + e.getMessage();
+            return new String[]{"Error: " + e.getMessage(), "0 Seconds"};
         } finally {
             if (containerId != null) {
                 try {

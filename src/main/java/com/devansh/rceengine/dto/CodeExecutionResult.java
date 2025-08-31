@@ -5,6 +5,6 @@ import lombok.Data;
 @Data
 public class CodeExecutionResult {
     private String output;
-    private Long executionTime;
+    private String executionTime;
     private String error;
 }

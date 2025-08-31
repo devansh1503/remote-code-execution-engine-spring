@@ -35,12 +35,13 @@ public class CodeWorker {
         CodeExecutionResult result = new CodeExecutionResult();
 
         try{
-            String output = dockerService.runCode(
+            String[]output = dockerService.runCode(
                     job.getRequest().getCode(),
                     job.getRequest().getStdin(),
                     job.getRequest().getLanguage()
             );
-            result.setOutput(output);
+            result.setOutput(output[0]);
+            result.setExecutionTime(output[1]);
             job.setResult(result);
             job.setStatus(CodeJob.Status.COMPLETED);
         } catch (Exception e) {
