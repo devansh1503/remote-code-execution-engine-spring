@@ -25,7 +25,7 @@ public class DockerService {
     private String language;
 
     public DockerService() {
-        String dockerHost = "tcp://localhost:2375";
+        String dockerHost = "tcp://host.docker.internal:2375";
         log.info("Connecting to Docker at: {}", dockerHost);
 
         DockerClientConfig config = DefaultDockerClientConfig.createDefaultConfigBuilder()
