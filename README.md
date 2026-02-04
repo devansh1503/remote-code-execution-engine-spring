@@ -1,10 +1,8 @@
-Remote Code Execution Engine
+# Remote Code Execution Engine
 
 A backend service that safely runs user-submitted code in isolated environments and returns the result. Think of it as the engine behind platforms like LeetCode or HackerRank — but simplified and built for learning, experimentation, and extension.
 
-⸻
-
-What this project does
+## What this project does
 	1.	You send some code (Python, Java, JavaScript, or C++) to an API.
 	2.	The system puts that request in a queue.
 	3.	A worker picks it up and runs the code inside a temporary Docker container.
@@ -13,9 +11,7 @@ What this project does
 
 Each run is isolated, short-lived, and cleaned up immediately after execution.
 
-⸻
-
-Why this exists
+## Why this exists
 
 This project was built to understand how real-world online code judges work:
 	•	How to safely execute untrusted code
@@ -24,10 +20,9 @@ This project was built to understand how real-world online code judges work:
 
 It is intentionally backend-focused and API-driven.
 
-⸻
 
-High-level architecture
-
+## High-level architecture
+```
 Client
   ↓
 REST API (Spring Boot)
@@ -40,11 +35,12 @@ Docker Container (per execution)
   ↓
 Result stored back in Redis
 
+
 You submit code → get a job ID → poll for results.
+```
 
-⸻
 
-Supported languages
+## Supported languages
 	•	Python
 	•	JavaScript (Node.js)
 	•	Java
@@ -52,9 +48,8 @@ Supported languages
 
 Each language runs in its own official Docker image.
 
-⸻
 
-Key features
+## Key features
 	•	Isolated execution – Every request runs in a fresh container
 	•	Queue-based processing – Prevents overload and enables scaling
 	•	Execution time tracking
@@ -63,12 +58,11 @@ Key features
 	•	Problem management – Store coding problems with difficulty levels
 	•	AI-based complexity verification – Validate time/space complexity using LLMs
 
-⸻
 
-API overview (simplified)
+## API overview (simplified)
 
 Submit code for execution
-
+```
 POST /api/execute
 
 Request:
@@ -85,12 +79,14 @@ Response:
   "id": "job-id",
   "status": "SUBMITTED"
 }
+```
 
 
 ⸻
 
-Get execution result
+## Get execution result
 
+```
 GET /api/result/{jobId}
 
 Response:
@@ -102,20 +98,18 @@ Response:
     "executionTime": "0.012 Seconds"
   }
 }
+```
 
 
-⸻
 
-Problems & difficulty management
+## Problems & difficulty management
 	•	Create coding problems
 	•	Filter by difficulty (EASY / MEDIUM / HARD)
 	•	Retrieve problem statements and solutions
 
 This makes the engine usable as a full coding practice backend.
 
-⸻
-
-How execution actually works
+## How execution actually works
 	•	A worker runs every few seconds
 	•	It pulls the next job ID from Redis
 	•	Spins up a language-specific Docker container
@@ -126,9 +120,8 @@ How execution actually works
 
 No container is reused. No state leaks.
 
-⸻
 
-Running locally (recommended way)
+## Running locally (recommended way)
 
 Prerequisites
 	•	Docker + Docker Compose
@@ -145,14 +138,12 @@ This will start:
 
 Docker socket is mounted so the app can create containers dynamically.
 
-⸻
 
-Environment variables
+## Environment variables
 	•	OPENAI_API_KEY – Required only for complexity analysis feature
 
-⸻
 
-Security notes
+## Security notes
 
 This project is for learning and controlled environments.
 
@@ -163,18 +154,16 @@ Before using in production, you would need:
 	•	Image hardening
 	•	Abuse prevention
 
-⸻
 
-Future improvements
+## Future improvements
 	•	Multiple workers for parallel execution
 	•	Language sandboxing with stricter limits
 	•	Job prioritization
 	•	Persistent execution logs
 	•	WebSocket-based live output
 
-⸻
 
-Who should look at this project
+## Who should look at this project
 	•	Backend engineers
 	•	Systems / platform engineers
 	•	Anyone curious how online judges work
